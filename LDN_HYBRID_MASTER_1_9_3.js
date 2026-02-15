@@ -1,0 +1,140 @@
+function applyIcon(view, id)
+{
+    var p = ProcessInstance.fromIcon(id);
+    if (!p)
+    {
+        console.criticalln("Falta icono: " + id);
+        return false;
+    }
+    p.executeOn(view);
+    return true;
+}
+
+function getStats(view)
+{
+    var s = new ImageStatistics;
+    s.generate(view.image);
+    return {
+        mean: s.mean,
+        median: s.median,
+        stdDev: s.stdDev
+    };
+}
+
+function findSeparated()
+{
+    var windows = ImageWindow.windows;
+    var starless = null;
+    var stars = null;
+
+    for (var i = 0; i < windows.length; i++)
+    {
+        var id = windows[i].mainView.id.toLowerCase();
+        if (id.indexOf("starless") != -1)
+            starless = windows[i].mainView;
+        if (id.indexOf("stars") != -1)
+            stars = windows[i].mainView;
+    }
+
+    return { starless: starless, stars: stars };
+}
+
+function createIFNMask(view)
+{
+    var pm = new PixelMath;
+    pm.expression = view.id + " * 0.5";
+    pm.useSingleExpression = true;
+    pm.createNewImage = true;
+    pm.newImageId = "IFN_MASK";
+    pm.executeOn(view);
+    return ImageWindow.windowById("IFN_MASK").mainView;
+}
+
+function run()
+{
+    console.writeln("=== LDN MASTER SYSTEM ===");
+
+    var w = ImageWindow.activeWindow;
+    if (w.isNull)
+    {
+        console.criticalln("No hay imagen activa.");
+        return;
+    }
+
+    var img = w.mainView;
+
+    console.writeln("NR lineal...");
+    applyIcon(img, "MLT_LINEAR_MASTER");
+
+    console.writeln("DBE suave...");
+    applyIcon(img, "DBE_MASTER");
+
+    console.writeln("Stretch...");
+    applyIcon(img, "MS_MASTER");
+
+    console.writeln("Separando estrellas...");
+    applyIcon(img, "STARX_REMOVE");
+
+    var separated = findSeparated();
+    if (!separated.starless || !separated.stars)
+    {
+        console.criticalln("No se encontraron starless/stars.");
+        return;
+    }
+
+    var starless = separated.starless;
+    var stars = separated.stars;
+
+    var stats = getStats(starless);
+
+    var enhanceFactor = 1.0;
+    var starFactor = 0.75;
+
+    if (stats.stdDev < 0.05)
+    {
+        enhanceFactor = 1.4;
+        starFactor = 0.65;
+    }
+    else if (stats.stdDev > 0.13)
+    {
+        enhanceFactor = 0.85;
+        starFactor = 0.85;
+    }
+
+    if (stats.mean > 0.25)
+    {
+        enhanceFactor *= 1.1;
+        starFactor *= 0.9;
+    }
+
+    console.writeln("Creando máscara IFN...");
+    var mask = createIFNMask(starless);
+    starless.window.setMask(mask.window);
+    starless.window.maskEnabled = true;
+
+    console.writeln("Realce estructural...");
+    applyIcon(starless, "LHE_MASTER");
+    applyIcon(starless, "CURVES_MASTER");
+
+    starless.window.maskEnabled = false;
+    starless.window.removeMask();
+
+    var pmEnh = new PixelMath;
+    pmEnh.expression = starless.id + " * " + enhanceFactor;
+    pmEnh.useSingleExpression = true;
+    pmEnh.createNewImage = false;
+    pmEnh.executeOn(starless);
+
+    console.writeln("Reintegrando estrellas...");
+
+    var pmFinal = new PixelMath;
+    pmFinal.expression = starless.id + " + (" + stars.id + " * " + starFactor + ")";
+    pmFinal.useSingleExpression = true;
+    pmFinal.createNewImage = true;
+    pmFinal.newImageId = "LDN_MASTER_FINAL";
+    pmFinal.executeOn(starless);
+
+    console.writeln("=== MASTER SYSTEM COMPLETADO ===");
+}
+
+run();
