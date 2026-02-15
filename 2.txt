@@ -1,0 +1,100 @@
+function applyIcon(view, id)
+{
+    var p = ProcessInstance.fromIcon(id);
+    if (!p)
+    {
+        console.criticalln("Falta icono: " + id);
+        return false;
+    }
+    p.executeOn(view);
+    return true;
+}
+
+function getMean(view)
+{
+    var img = view.image;
+    var s = new ImageStatistics;
+    s.generate(img);
+    return s.mean;
+}
+
+function run()
+{
+    console.writeln("=== LDN SMART PRO ===");
+
+    var w = ImageWindow.activeWindow;
+    if (w.isNull)
+    {
+        console.criticalln("No hay imagen activa.");
+        return;
+    }
+
+    var original = w.mainView;
+
+    console.writeln("Separando estrellas...");
+    applyIcon(original, "STARX_REMOVE");
+
+    var windows = ImageWindow.windows;
+    var starless = null;
+    var stars = null;
+
+    for (var i = 0; i < windows.length; i++)
+    {
+        if (windows[i].mainView.id.indexOf("starless") != -1)
+            starless = windows[i].mainView;
+
+        if (windows[i].mainView.id.indexOf("stars") != -1)
+            stars = windows[i].mainView;
+    }
+
+    if (!starless || !stars)
+    {
+        console.criticalln("No se encontraron imágenes starless/stars.");
+        return;
+    }
+
+    var mean = getMean(starless);
+    console.writeln("Brillo medio detectado: " + mean);
+
+    var starFactor = 0.75;
+    var enhanceFactor = 1.0;
+
+    if (mean < 0.15)
+    {
+        starFactor = 0.85;
+        enhanceFactor = 0.8;
+    }
+    else if (mean > 0.25)
+    {
+        starFactor = 0.65;
+        enhanceFactor = 1.2;
+    }
+
+    console.writeln("Factor estrellas: " + starFactor);
+    console.writeln("Factor realce: " + enhanceFactor);
+
+    console.writeln("Realzando polvo...");
+    applyIcon(starless, "LHE_FINE_DETAIL");
+    applyIcon(starless, "CURVES_DUST_PRO");
+
+    var pm = new PixelMath;
+    pm.expression = starless.id + " * " + enhanceFactor;
+    pm.useSingleExpression = true;
+    pm.createNewImage = false;
+    pm.executeOn(starless);
+
+    console.writeln("Reintegrando estrellas...");
+
+    var pm2 = new PixelMath;
+    pm2.expression = starless.id + " + (" + stars.id + " * " + starFactor + ")";
+    pm2.useSingleExpression = true;
+    pm2.createNewImage = true;
+    pm2.newImageId = "LDN_SMART_FINAL";
+    pm2.executeOn(starless);
+
+    console.writeln("=== LDN SMART COMPLETADO ===");
+}
+
+run();
+         LDN_SMART_PRO_1_9_3.js
+				

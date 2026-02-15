@@ -1,0 +1,78 @@
+function getImages()
+{
+    var w = ImageWindow.windows;
+    if (w.length < 2)
+    {
+        console.criticalln("Abre L y RGB.");
+        return null;
+    }
+    return { L: w[0].mainView, RGB: w[1].mainView };
+}
+
+function applyIcon(view, id)
+{
+    var p = ProcessInstance.fromIcon(id);
+    if (!p)
+    {
+        console.criticalln("Falta icono: " + id);
+        return false;
+    }
+    p.executeOn(view);
+    return true;
+}
+
+function applyMask(view, maskId)
+{
+    var maskInstance = ProcessInstance.fromIcon(maskId);
+    if (!maskInstance) return false;
+
+    var dup = view.window.duplicate();
+    var maskView = dup.mainView;
+    maskInstance.executeOn(maskView);
+
+    view.window.setMask(maskView.window);
+    view.window.maskEnabled = true;
+    return maskView;
+}
+
+function removeMask(view)
+{
+    view.window.maskEnabled = false;
+    view.window.removeMask();
+}
+
+function run()
+{
+    console.writeln("=== LDN PUBLICATION PRO ===");
+
+    var imgs = getImages();
+    if (!imgs) return;
+
+    var RGB = imgs.RGB;
+
+    console.writeln("Separando estrellas...");
+    applyIcon(RGB, "STARX_REMOVE");
+
+    console.writeln("Aplicando máscara de polvo...");
+    var mask = applyMask(RGB, "RANGE_DUST_MASK");
+
+    console.writeln("Realce fino...");
+    applyIcon(RGB, "LHE_FINE_DETAIL");
+
+    console.writeln("Contraste selectivo...");
+    applyIcon(RGB, "CURVES_CONTRAST_PRO");
+
+    console.writeln("Quitando máscara...");
+    removeMask(RGB);
+
+    console.writeln("Saturación controlada...");
+    applyIcon(RGB, "COLOR_SAT_PRO");
+
+    console.writeln("Restaurando estrellas...");
+    applyIcon(RGB, "STARX_RESTORE");
+
+    console.writeln("=== NIVEL PUBLICACIÓN COMPLETADO ===");
+}
+
+run();
+                LDN_PUBLICATION_PRO_1_9_3.js
